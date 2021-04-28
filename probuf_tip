@@ -1,0 +1,5 @@
+1.使用protobuf序列化和反序列化
+2.编译.proto文件，生成.h文件和.cc文件,使用以下命令：
+protoc --cpp_out=. ./chat_protocal.proto
+
+
