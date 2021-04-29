@@ -39,15 +39,13 @@ public:
 		std::memcpy(data(),&m_header,sizeof(m_header));
         if(msg_type == MT_ROOM_INFO){
             const RoomInformation* info = reinterpret_cast<const RoomInformation*>(body());
-           // std::cout<<"encode_message"<<std::endl;
+            std::cout<<"encode_message"<<std::endl;
             std::cout<<"server send bytes:"<<info->name.nameLen<<"["<<info->name.name<<"]"<<std::endl;
 	        std::cout<<"server send bytes:"<<info->chat.infoLen<<"["<<info->chat.information<<"]"<<std::endl;
                
         }
     }
-	void encode_message(int msg_type, const std::string& str) {
-		encode_message(msg_type, str.data(), str.size());
-	}
+
 	//将数据的长度放在m_data
 	void encode_header() {
 		char header[header_length + 1]={ 0 };
