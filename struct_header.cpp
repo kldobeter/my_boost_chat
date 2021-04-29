@@ -1,4 +1,4 @@
-#include "struct_header.h"
+ï»¿#include "struct_header.h"
 #include "serialize_object.h"
 #include "json_object.h"
 #include "chat_protocal.pb.h"
@@ -6,9 +6,102 @@
 #include <cstdlib>
 #include <iostream>
 
+/**
+ * @brief Parse the input data into a format output data  
+ * @param [in]   const std::string& input:input format:â€œBindName duduâ€,"Chat hello"
+ * @param [out] int* type:MT_BIND_NAME,MT_CHAT_INFO,MT_ROOM_INFO
+ * @param [out] std::string& output:different flag decide to genarate  different output format string
+ * @param [in]   int flag:MFT_C_TRADITIONAL,MFT_SERIALIZATION,MFT_JSON,MFT_PROTOBUF
+ * @return          bool:return true/false
+*/
+bool parseMessage(const std::string& input, int* type, std::string& output, int flag) {
+	bool ret = false;
+	auto pos = input.find_first_of(" ");//find the first space of the input string 
+	if (pos == std::string::npos)//not find 
+		return ret;
+	if (pos == 0)
+		return ret;
+	//"BindName ok"->substr ->BindName
+	//"Chat hello"->substr->Chat
+	auto cmd = input.substr(0, pos);
+	if (cmd == "BindName") {
+		//we try to bind name 
+		std::string name = input.substr(pos + 1);
+		if (name.size() > 32)
+			return ret;
+		if (type)
+			*type = MT_BIND_NAME;
+		
+		switch (flag)
+		{
+		case MFT_C_TRADITIONAL://use C struct BindName
+			BindName bind_name;
+			bind_name.nameLen = name.size();
+			std::memcpy(&(bind_name.name), name.data(), name.size());
+			auto buffer = reinterpret_cast<const char*>(&bind_name);
+			output.assign(buffer, buffer + sizeof(bind_name));
+			ret = true;
+			break;
+		case MFT_SERIALIZATION://use boost serialization
+			output = oserialize(SBindName(std::move(name)));
+			ret = true;
+			break;
+		case MFT_JSON: {//use ptree, name string parse into json format{"name" : "ok"}
+			ptree tree_name;
+			tree_name.put("name", name);
+			output = ptreeToJsonString(tree_name);
+			ret = true;
+			break;
+		}
+		case MFT_PROTOBUF://use google protobuf, serialize to string 
+			PBindName bindname;
+			bindname.set_name(name);
+			ret = bindname.SerializeToString(&output);
+			break;
+		}
+	}
+	else if (cmd == "Chat") {
+		//we try to chat
+		std::string info = input.substr(pos + 1);
+		if (info.size() > 256)
+			return ret;
+		if (type)
+			*type = MT_CHAT_INFO;
+		switch (flag)
+		{
+		case MFT_C_TRADITIONAL://C struct ChatInformation
+			ChatInformation chat;
+			chat.infoLen = info.size();
+			std::memcpy(&(chat.information), info.data(), info.size());
+			auto buffer = reinterpret_cast<const char*> (&chat);
+			output.assign(buffer, buffer + sizeof(chat));
+			ret = true;
+			break;
+		case MFT_SERIALIZATION://boost serialize
+			output = oserialize(SBindName(std::move(info)));
+			ret = true;
+			break;
+		case MFT_JSON: {// to json string format{"information" : "hello"}
+			ptree tree_info;
+			tree_info.put("information", info);
+			output = ptreeToJsonString(tree_info);
+			ret = true;
+			break;
+		}
+			
+		case MFT_PROTOBUF://use protobuf to serialization
+			PChat pchat;
+			pchat.set_information(info);
+			ret = pchat.SerializeToString(&output);
+			break;
+		}
+	}
+	return ret;
+}
+
 bool parseMessage1(const std::string& input, int* type, std::string& output) {
-	auto pos = input.find_first_of(" ");//²éÕÒ×Ö·û´®ÖĞµÚÒ»¸ö¿Õ¸ñ
-	if (pos == std::string::npos)//Ã»ÕÒµ½
+	auto pos = input.find_first_of(" ");//æŸ¥æ‰¾å­—ç¬¦ä¸²ä¸­ç¬¬ä¸€ä¸ªç©ºæ ¼
+	if (pos == std::string::npos)//æ²¡æ‰¾åˆ°
 		return false;
 	if (pos == 0)
 		return false;
@@ -22,7 +115,7 @@ bool parseMessage1(const std::string& input, int* type, std::string& output) {
 			return false;
 		if (type)
 			*type = MT_BIND_NAME;
-		//Ê¹ÓÃC struct BindName
+		//ä½¿ç”¨C struct BindName
 		BindName bind_name;
 		bind_name.nameLen = name.size();
 		std::memcpy(&(bind_name.name), name.data(), name.size());
@@ -38,7 +131,7 @@ bool parseMessage1(const std::string& input, int* type, std::string& output) {
 			return false;
 		if (type)
 			*type = MT_CHAT_INFO;
-		//Ê¹ÓÃC struct ChatInformation
+		//ä½¿ç”¨C struct ChatInformation
 		ChatInformation chat;
 		chat.infoLen = info.size();
 		std::memcpy(&(chat.information), info.data(),info.size());
@@ -49,21 +142,10 @@ bool parseMessage1(const std::string& input, int* type, std::string& output) {
 
 	return false;
 }
-
+//2.ç¬¬äºŒç§æ–¹å¼ï¼Œä½¿ç”¨booståº“çš„åºåˆ—åŒ–ï¼Œå°†è¾“å…¥çš„å­—ç¬¦ä¸² åºåˆ—åŒ– å‘é€æ•°æ®
 bool parseMessage2(const std::string& input, int* type, std::string& output) {
-    return true;
-}
-template <typename T>
-std::string serialize(const T& obj) {
-	std::stringstream ss;
-	boost::archive::text_oarchive oa(ss);
-	oa & obj;
-	return ss.str();
-}
-
-bool parseMessageToProto(const std::string& input, int* type, std::string& output) {
-	auto pos = input.find_first_of(" ");//²éÕÒ×Ö·û´®ÖĞµÚÒ»¸ö¿Õ¸ñ
-	if (pos == std::string::npos)//Ã»ÕÒµ½
+	auto pos = input.find_first_of(" ");//æŸ¥æ‰¾å­—ç¬¦ä¸²ä¸­ç¬¬ä¸€ä¸ªç©ºæ ¼
+	if (pos == std::string::npos)//æ²¡æ‰¾åˆ°
 		return false;
 	if (pos == 0)
 		return false;
@@ -77,8 +159,56 @@ bool parseMessageToProto(const std::string& input, int* type, std::string& outpu
 			return false;
 		if (type)
 			*type = MT_BIND_NAME;
-		//Ê¹ÓÃprotobuf£¬½«ÆäĞòÁĞ»¯
-		//Ê¹ÓÃ.protoÎÄ¼şÖĞ¶¨ÒåµÄmessage
+		
+		/*BindName bind_name;
+		bind_name.nameLen = name.size();
+		std::memcpy(&(bind_name.name), name.data(), name.size());
+		auto buffer = reinterpret_cast<const char*>(&bind_name);
+		output.assign(buffer, buffer + sizeof(bind_name));*/
+		//ä½¿ç”¨åºåˆ—åŒ–
+		output = serialize(SBindName(std::move(name)));
+		return true;
+
+	}
+	else if (cmd == "Chat") {
+		//we try to chat
+		std::string info = input.substr(pos + 1);
+		if (info.size() > 256)
+			return false;
+		if (type)
+			*type = MT_CHAT_INFO;
+	
+		/*ChatInformation chat;
+		chat.infoLen = info.size();
+		std::memcpy(&(chat.information), info.data(), info.size());
+		auto buffer = reinterpret_cast<const char*> (&chat);
+		output.assign(buffer, buffer + sizeof(chat));*/
+		//ä½¿ç”¨åºåˆ—åŒ–
+		output = serialize(SChatInfo(std::move(info)));
+		return true;
+	}
+
+	return false;
+}
+
+bool parseMessageToProto(const std::string& input, int* type, std::string& output) {
+	auto pos = input.find_first_of(" ");//æŸ¥æ‰¾å­—ç¬¦ä¸²ä¸­ç¬¬ä¸€ä¸ªç©ºæ ¼
+	if (pos == std::string::npos)//æ²¡æ‰¾åˆ°
+		return false;
+	if (pos == 0)
+		return false;
+	//"BindName ok"->substr ->BindName
+	//"Chat hello"->substr->Chat
+	auto cmd = input.substr(0, pos);
+	if (cmd == "BindName") {
+		//we try to bind name 
+		std::string name = input.substr(pos + 1);
+		if (name.size() > 32)
+			return false;
+		if (type)
+			*type = MT_BIND_NAME;
+		//ä½¿ç”¨protobufï¼Œå°†å…¶åºåˆ—åŒ–
+		//ä½¿ç”¨.protoæ–‡ä»¶ä¸­å®šä¹‰çš„message
 		PBindName bindname;
 		bindname.set_name(name);
 		auto flag = bindname.SerializeToString(&output);
@@ -91,8 +221,8 @@ bool parseMessageToProto(const std::string& input, int* type, std::string& outpu
 			return false;
 		if (type)
 			*type = MT_CHAT_INFO;
-		//Ê¹ÓÃprotobuf£¬½«ÆäĞòÁĞ»¯
-		//Ê¹ÓÃ.protoÎÄ¼şÖĞ¶¨ÒåµÄmessage
+		//ä½¿ç”¨protobufï¼Œå°†å…¶åºåˆ—åŒ–
+		//ä½¿ç”¨.protoæ–‡ä»¶ä¸­å®šä¹‰çš„message
 		PChat chat;
 		chat.set_information(info);
 		auto flag = chat.SerializeToString(&output);
@@ -102,19 +232,9 @@ bool parseMessageToProto(const std::string& input, int* type, std::string& outpu
 	return false;
 }
 
-/*inputµÄ¸ñÊ½£º
-BindName dudu
-Chat hello
-*/
-/*typeµÄÈ¡Öµ:MT_BIND_NAME,MT_CHAT_INFO,MT_ROOM_INFO*/
-/*outputµÄ¸ñÊ½£ºjson string
-{¡°name¡± : "dudu"}
-{"information" : "hello"}
-{"name" : "dudu" , "information" : "hello"}
-*/
 bool parseMessageToJson(const std::string& input, int* type, std::string& output) {
-	auto pos = input.find_first_of(" ");//²éÕÒ×Ö·û´®ÖĞµÚÒ»¸ö¿Õ¸ñ
-	if (pos == std::string::npos)//Ã»ÕÒµ½
+	auto pos = input.find_first_of(" ");//æŸ¥æ‰¾å­—ç¬¦ä¸²ä¸­ç¬¬ä¸€ä¸ªç©ºæ ¼
+	if (pos == std::string::npos)//æ²¡æ‰¾åˆ°
 		return false;
 	if (pos == 0)
 		return false;
@@ -128,7 +248,7 @@ bool parseMessageToJson(const std::string& input, int* type, std::string& output
 			return false;
 		if(type)
 			*type = MT_BIND_NAME;
-		//Ê¹ÓÃptree ½«name ×ª»¯Îªjson ¸ñÊ½{"name" : "ok"}
+		//ä½¿ç”¨ptree å°†name è½¬åŒ–ä¸ºjson æ ¼å¼{"name" : "ok"}
 		ptree tree;
 		tree.put("name", name);
 		output = ptreeToJsonString(tree);
@@ -141,7 +261,7 @@ bool parseMessageToJson(const std::string& input, int* type, std::string& output
 			return false;
 		if(type)
 			*type = MT_CHAT_INFO;
-		//Ê¹ÓÃptree ½«chat ×ª»¯Îªjson ¸ñÊ½{"information" : "hello"}
+		//ä½¿ç”¨ptree å°†chat è½¬åŒ–ä¸ºjson æ ¼å¼{"information" : "hello"}
 		ptree tree;
 		tree.put("information", info);
 		output = ptreeToJsonString(tree);

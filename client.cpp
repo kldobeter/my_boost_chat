@@ -1,5 +1,6 @@
 #include "client.h"
 #include "struct_header.h"
+#include "serialize_object.h"
 
 chat_client::chat_client(boost::asio::io_service& io, boost::asio::ip::tcp::resolver::iterator endpoint_iter)
 	:m_io_service(io),m_socket(io)
@@ -50,16 +51,36 @@ void chat_client::do_read_header() {
 //	std::cout.write(m_readmsg.body(), m_readmsg.body_length());
 //	std::cout << std::endl;
 //}
-void chat_client::print_readdata() {
-	if (m_readmsg.type() == MT_ROOM_INFO && m_readmsg.body_length() == sizeof(RoomInformation)) {
-		const RoomInformation* info = reinterpret_cast<const RoomInformation*>(m_readmsg.body());
-		//std::cout << "client: " << info->name.nameLen << "["<<info->name.name<<"]"<<std::endl;
-        //std::cout << "["<<info->chat.infoLen<<"]"<<info->chat.information<<std::endl;
-        std::cout<<"Client:['";
-        std::cout.write(info->name.name, info->name.nameLen);
-		std::cout << "']\n'";
-		std::cout.write(info->chat.information,info->chat.infoLen);
-		std::cout << "'\n";
+void chat_client::print_readdata(int flag) {
+	if (m_readmsg.type() == MT_ROOM_INFO) {
+		switch (flag)
+		{
+		case MFT_C_TRADITIONAL:
+			if (m_readmsg.body_length() == sizeof(RoomInformation)) {
+				const RoomInformation* info = reinterpret_cast<const RoomInformation*>(m_readmsg.body());
+				//std::cout << "client: " << info->name.nameLen << "["<<info->name.name<<"]"<<std::endl;
+				//std::cout << "["<<info->chat.infoLen<<"]"<<info->chat.information<<std::endl;
+				std::cout << "Client:[";
+				std::cout.write(info->name.name, info->name.nameLen);
+				std::cout << "]\n'";
+				std::cout.write(info->chat.information, info->chat.infoLen);
+				std::cout << "'\n";
+			}
+			break;
+		case MFT_SERIALIZATION: {
+			SRoomInfo roominfo;
+			iserialize(roominfo, std::string(m_readmsg.body(), m_readmsg.body() + m_readmsg.body_length()));
+			std::cout << "Client:[";
+			std::cout << roominfo.get_name() << std::endl;
+			std::cout << "'" << roominfo.get_info() << "'" << std::endl;
+			break;
+		}
+		case MFT_JSON:
+			break;
+		case MFT_PROTOBUF:
+			break;
+		}
+		
 	}else{
         std::cout<<"client not support this type:"<<m_readmsg.type()<<std::endl;
     }
@@ -68,7 +89,9 @@ void chat_client::do_read_body() {
 	boost::asio::async_read(m_socket,boost::asio::buffer(m_readmsg.body(),m_readmsg.body_length()),
 		[this](const boost::system::error_code& ec,std::size_t length) {
 			if (!ec) {
-				print_readdata();//输出读到的数据
+				//输出读到的数据
+				//print_readdata(MFT_C_TRADITIONAL);
+				print_readdata(MFT_SERIALIZATION);
 				//
 				do_read_header();
 			}
@@ -77,6 +100,7 @@ void chat_client::do_read_body() {
 			}
 		});
 }
+
 void chat_client::do_write() {
 	boost::asio::async_write(m_socket,boost::asio::buffer(m_writemsgs.front().data(),m_writemsgs.front().length()),
 		[this](const boost::system::error_code& ec,std::size_t length) {

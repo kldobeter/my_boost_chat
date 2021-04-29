@@ -1,5 +1,6 @@
 #include "server.h"
 #include "struct_header.h"
+#include "serialize_object.h"
 
 void chat_room::join(chat_participant_ptr participant) 
 {//有session加入该room
@@ -59,7 +60,9 @@ void chat_session::do_read_body() {
 		[this, self](const boost::system::error_code& ec, std::size_t length) {
 			if (!ec) {//读取一个完整的消息header+body
 				//m_room.deliver(m_readmsg);
-				handle_message();//处理收到的数据包，经过解析处理，再发送给server
+				//处理收到的数据包，经过解析处理，再发送给server
+				//handle_message(MFT_C_TRADITIONAL);
+				handle_message(MFT_SERIALIZATION);
 				do_read_header();
 			}
 			else {
@@ -76,24 +79,60 @@ RoomInformation chat_session::buildRoomInfo() const {
 	std::memcpy(info.chat.information, m_chatinfo.data(), m_chatinfo.size());
 	return info;
 }
+std::string chat_session::buildRoomInfoStr() const {
+	return oserialize(SRoomInfo(std::move(m_bindname),std::move(m_chatinfo)));
+}
 
-void chat_session::handle_message() {
+void chat_session::handle_message(int flag) {
 	auto type = m_readmsg.type();
 	if (type == MT_BIND_NAME)
 	{
-		const BindName* name = reinterpret_cast<const BindName*>(m_readmsg.body());
-		m_bindname.assign(name->name, name->name + name->nameLen);
+		if (flag == MFT_C_TRADITIONAL) {
+			const BindName* name = reinterpret_cast<const BindName*>(m_readmsg.body());
+			m_bindname.assign(name->name, name->name + name->nameLen);
+		}
+		else if (flag == MFT_SERIALIZATION) {
+			SBindName bindname;
+			iserialize(bindname, std::string(m_readmsg.body(), m_readmsg.body()+m_readmsg.body_length()));
+			m_bindname = bindname.get_bindname();
+		}
+		else if (flag == MFT_JSON) {
+
+		}
+		else if (flag == MFT_PROTOBUF) {
+
+		}
+		else {}
+
 	}
 	else if (type == MT_CHAT_INFO) {
 		//只有chat info才需要发送给服务器，绑定name的时候只需要绑定就好
-		const ChatInformation* info = reinterpret_cast<const ChatInformation*>(m_readmsg.body());
-		m_chatinfo.assign(info->information, info->information + info->infoLen);
+		if (flag == MFT_C_TRADITIONAL) {
+			const ChatInformation* info = reinterpret_cast<const ChatInformation*>(m_readmsg.body());
+			m_chatinfo.assign(info->information, info->information + info->infoLen);
+			auto room = buildRoomInfo();
+			chat_message msg;
+			msg.encode_message(MT_ROOM_INFO, &room, sizeof(room));
+			m_room.deliver(msg);//broadcast
+		}
+		else if (flag == MFT_SERIALIZATION) {
+			SChatInfo chatinfo;
+			iserialize(chatinfo, std::string(m_readmsg.body(), m_readmsg.body() + m_readmsg.body_length()));
+			m_chatinfo = chatinfo.get_chatinfo();
+			auto room = buildRoomInfoStr();
+			chat_message msg;
+			msg.encode_message(MT_ROOM_INFO, room);
+			m_room.deliver(msg);
+		}
+		else if (flag == MFT_JSON) {
 
-		auto room = buildRoomInfo();
-		chat_message msg;
-		msg.encode_message(MT_ROOM_INFO, &room, sizeof(room));
-	           
-        m_room.deliver(msg);//broadcast
+		}
+		else if (flag == MFT_PROTOBUF) {
+
+		}
+		else {}
+		//
+		
 
 	}
 	else {

@@ -37,7 +37,7 @@ void pro_input_message1(char* line, chat_client& client) {
 	
 	std::string input(line, line + std::strlen(line));
 	std::string output;
-	if (parseMessage1(input, &type, output)) {
+	if (parseMessage(input, &type, output,MFT_SERIALIZATION)) {
 		chat.encode_message(type, output.data(), output.size());
 		client.write(chat);
 		std::cout << "Client send :[" << output.size() << "]" <<"type:"<<type<< std::endl;

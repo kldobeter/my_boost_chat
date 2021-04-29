@@ -18,7 +18,7 @@ private:
 
 	void do_read_header();
 	void do_read_body();
-	void print_readdata();
+	void print_readdata(int flag);
 
 	boost::asio::io_service& m_io_service;
 	boost::asio::ip::tcp::socket m_socket;
