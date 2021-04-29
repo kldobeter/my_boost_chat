@@ -1,11 +1,14 @@
 #include "server.h"
 #include "client.h"
+#include "chat_protocal.pb.h"
 
+#include <vector>
 //
 //using chat_message_queue = std::deque<chat_message>;
 //
 int test_server(int argc, char* argv[]) {
 	try {
+		
 		if (argc < 2) {
 			std::cerr << "Usage:chat_server <port> [<port> ...]" << std::endl;
 			return 0;
@@ -17,11 +20,18 @@ int test_server(int argc, char* argv[]) {
 			boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(),atoi(argv[i]));//ipºÍport
 			servers.emplace_back(io_service, endpoint);
 		}
+
+		std::vector<std::thread> thread_pool;
+		int threadnum = std::thread::hardware_concurrency();
+		for (int i = 0;i < threadnum + 1;++i) {
+			thread_pool.emplace_back([&io_service]() {io_service.run();});
+		}
 		io_service.run();
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what() << std::endl;
 	}
+
 	return 1;
 }
 void pro_input_message(char* line,chat_client& client) {
@@ -37,7 +47,10 @@ void pro_input_message1(char* line, chat_client& client) {
 	
 	std::string input(line, line + std::strlen(line));
 	std::string output;
-	if (parseMessage(input, &type, output,MFT_SERIALIZATION)) {
+	//if (parseMessage(input, &type, output, MFT_C_TRADITIONAL)) {
+	//if (parseMessage(input, &type, output, MFT_SERIALIZATION)) {
+	//if (parseMessage(input, &type, output, MFT_JSON)) {
+	if (parseMessage(input, &type, output, MFT_PROTOBUF)) {
 		chat.encode_message(type, output.data(), output.size());
 		client.write(chat);
 		std::cout << "Client send :[" << output.size() << "]" <<"type:"<<type<< std::endl;
@@ -75,8 +88,11 @@ void test_client(int argc, char* argv[]) {
 
 }
 int main(int argc, char* argv[]) {
+	GOOGLE_PROTOBUF_VERIFY_VERSION;
 //	test_server(argc, argv);
 	test_client(argc, argv);
 
+	//ÊÍ·ÅprotobufÄÚ´æ
+	google::protobuf::ShutdownProtobufLibrary();
 	return 0;
 }

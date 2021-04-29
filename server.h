@@ -48,7 +48,7 @@ private:
 	//处理接收消息
 	void handle_message(int flag);
 	RoomInformation buildRoomInfo() const;
-	std::string buildRoomInfoStr() const;
+	std::string buildRoomInfoStr(int flag) const;
 
 	boost::asio::ip::tcp::socket m_socket;
 	chat_room& m_room;//该地方使用引用，表明chat_session比chat_room对象的生命周期短

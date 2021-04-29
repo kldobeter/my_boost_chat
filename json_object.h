@@ -11,3 +11,8 @@ inline std::string ptreeToJsonString(const ptree& tree) {
 	boost::property_tree::write_json(ss, tree, false);
 	return ss.str();
 }
+
+void JsonStringToPree(ptree& tree,const std::string& str) {
+	std::stringstream ss(str);
+	boost::property_tree::read_json(ss, tree);
+}

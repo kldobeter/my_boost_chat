@@ -1,6 +1,8 @@
 #include "server.h"
 #include "struct_header.h"
 #include "serialize_object.h"
+#include "json_object.h"
+#include "chat_protocal.pb.h"
 
 void chat_room::join(chat_participant_ptr participant) 
 {//有session加入该room
@@ -79,12 +81,36 @@ RoomInformation chat_session::buildRoomInfo() const {
 	std::memcpy(info.chat.information, m_chatinfo.data(), m_chatinfo.size());
 	return info;
 }
-std::string chat_session::buildRoomInfoStr() const {
-	return oserialize(SRoomInfo(std::move(m_bindname),std::move(m_chatinfo)));
+std::string chat_session::buildRoomInfoStr(int flag) const {
+	if (flag == MFT_SERIALIZATION) {
+		return oserialize(SRoomInfo(m_bindname, m_chatinfo));
+	}
+	else if (flag == MFT_JSON) {
+		ptree tree;
+		tree.put("name", m_bindname);
+		tree.put("information", m_chatinfo);
+		return ptreeToJsonString(tree);
+	}
+	else if (flag == MFT_PROTOBUF) {
+		std::string output;
+		pRoomInformation info;
+		info.set_name(m_bindname);
+		info.set_information(m_chatinfo);
+		auto ret = info.SerializeToString(&output);
+		/*assert(ret);*/
+		if (!ret)
+			return std::string();
+		return output;
+	}
+	else{
+		return std::string();
+	}
+
 }
 
 void chat_session::handle_message(int flag) {
 	auto type = m_readmsg.type();
+	auto is_send = false;
 	if (type == MT_BIND_NAME)
 	{
 		if (flag == MFT_C_TRADITIONAL) {
@@ -97,10 +123,14 @@ void chat_session::handle_message(int flag) {
 			m_bindname = bindname.get_bindname();
 		}
 		else if (flag == MFT_JSON) {
-
+			ptree tree;
+			JsonStringToPree(tree, std::string(m_readmsg.body(), m_readmsg.body() + m_readmsg.body_length()));
+			m_bindname = tree.get<std::string>("name");
 		}
 		else if (flag == MFT_PROTOBUF) {
-
+			PBindName bindname;
+			bindname.ParseFromString(std::string(m_readmsg.body(), m_readmsg.body() + m_readmsg.body_length()));
+			m_bindname = bindname.name();
 		}
 		else {}
 
@@ -114,26 +144,32 @@ void chat_session::handle_message(int flag) {
 			chat_message msg;
 			msg.encode_message(MT_ROOM_INFO, &room, sizeof(room));
 			m_room.deliver(msg);//broadcast
+			is_send = true;
 		}
 		else if (flag == MFT_SERIALIZATION) {
 			SChatInfo chatinfo;
 			iserialize(chatinfo, std::string(m_readmsg.body(), m_readmsg.body() + m_readmsg.body_length()));
 			m_chatinfo = chatinfo.get_chatinfo();
-			auto room = buildRoomInfoStr();
+		}
+		else if (flag == MFT_JSON) {
+			ptree tree;
+			JsonStringToPree(tree, std::string(m_readmsg.body(), m_readmsg.body() + m_readmsg.body_length()));
+			m_chatinfo = tree.get<std::string>("information");
+		}
+		else if (flag == MFT_PROTOBUF) {
+			PChat chat;
+			chat.ParseFromString(std::string(m_readmsg.body(), m_readmsg.body() + m_readmsg.body_length()));
+			m_chatinfo = chat.information();
+		}
+		else {
+		}
+		//
+		if (!is_send) {//是否已经发送，若没有发送则在此发送
+			auto room = buildRoomInfoStr(flag);
 			chat_message msg;
 			msg.encode_message(MT_ROOM_INFO, room);
 			m_room.deliver(msg);
 		}
-		else if (flag == MFT_JSON) {
-
-		}
-		else if (flag == MFT_PROTOBUF) {
-
-		}
-		else {}
-		//
-		
-
 	}
 	else {
         std::cout<<"server receive not vaild msg:[type="<<type<<"]"<<std::endl;

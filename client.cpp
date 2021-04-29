@@ -1,6 +1,8 @@
 #include "client.h"
 #include "struct_header.h"
 #include "serialize_object.h"
+#include "json_object.h"
+#include "chat_protocal.pb.h"
 
 chat_client::chat_client(boost::asio::io_service& io, boost::asio::ip::tcp::resolver::iterator endpoint_iter)
 	:m_io_service(io),m_socket(io)
@@ -75,10 +77,22 @@ void chat_client::print_readdata(int flag) {
 			std::cout << "'" << roominfo.get_info() << "'" << std::endl;
 			break;
 		}
-		case MFT_JSON:
+		case MFT_JSON: {
+			ptree tree;
+			JsonStringToPree(tree, std::string(m_readmsg.body(), m_readmsg.body() + m_readmsg.body_length()));
+			std::cout << "Client:[";
+			std::cout << tree.get<std::string>("name")<< "]" << std::endl;
+			std::cout << "'" << tree.get<std::string>("information")<< "'" << std::endl;
 			break;
-		case MFT_PROTOBUF:
+		}
+		case MFT_PROTOBUF: {
+			pRoomInformation roominfo;
+			roominfo.ParseFromString(std::string(m_readmsg.body(), m_readmsg.body() + m_readmsg.body_length()));
+			std::cout << "Client:[";
+			std::cout << roominfo.name() << "]" << std::endl;
+			std::cout << "'" << roominfo.information() << "'" << std::endl;
 			break;
+		 }	
 		}
 		
 	}else{
