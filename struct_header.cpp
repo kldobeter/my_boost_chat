@@ -21,6 +21,8 @@ bool parseMessage(const std::string& input, int* type, std::string& output, int 
 		return ret;
 	if (pos == 0)
 		return ret;
+    
+    //MsgFormatType mft_flag = MsgFormatType(flag);    
 	//"BindName ok"->substr ->BindName
 	//"Chat hello"->substr->Chat
 	auto cmd = input.substr(0, pos);
@@ -31,10 +33,10 @@ bool parseMessage(const std::string& input, int* type, std::string& output, int 
 			return ret;
 		if (type)
 			*type = MT_BIND_NAME;
-		
+
 		switch (flag)
 		{
-		case MFT_C_TRADITIONAL://use C struct BindName
+		case MFT_C_TRADITIONAL:{//use C struct BindName
 			BindName bind_name;
 			bind_name.nameLen = name.size();
 			std::memcpy(&(bind_name.name), name.data(), name.size());
@@ -42,22 +44,25 @@ bool parseMessage(const std::string& input, int* type, std::string& output, int 
 			output.assign(buffer, buffer + sizeof(bind_name));
 			ret = true;
 			break;
+        }
 		case MFT_SERIALIZATION://use boost serialization
 			output = oserialize(SBindName(std::move(name)));
 			ret = true;
 			break;
-		case MFT_JSON: {//use ptree, name string parse into json format{"name" : "ok"}
+        case MFT_JSON:{//use ptree, name string parse into json format{"name" : "ok"}
 			ptree tree_name;
 			tree_name.put("name", name);
 			output = ptreeToJsonString(tree_name);
 			ret = true;
 			break;
 		}
-		case MFT_PROTOBUF://use google protobuf, serialize to string 
+		case MFT_PROTOBUF:{//use google protobuf, serialize to string 
 			PBindName bindname;
 			bindname.set_name(name);
 			ret = bindname.SerializeToString(&output);
 			break;
+         }
+
 		}
 	}
 	else if (cmd == "Chat") {
@@ -69,7 +74,7 @@ bool parseMessage(const std::string& input, int* type, std::string& output, int 
 			*type = MT_CHAT_INFO;
 		switch (flag)
 		{
-		case MFT_C_TRADITIONAL://C struct ChatInformation
+		case MFT_C_TRADITIONAL:{//C struct ChatInformation
 			ChatInformation chat;
 			chat.infoLen = info.size();
 			std::memcpy(&(chat.information), info.data(), info.size());
@@ -77,6 +82,7 @@ bool parseMessage(const std::string& input, int* type, std::string& output, int 
 			output.assign(buffer, buffer + sizeof(chat));
 			ret = true;
 			break;
+        }
 		case MFT_SERIALIZATION://boost serialize
 			output = oserialize(SBindName(std::move(info)));
 			ret = true;
@@ -89,11 +95,12 @@ bool parseMessage(const std::string& input, int* type, std::string& output, int 
 			break;
 		}
 			
-		case MFT_PROTOBUF://use protobuf to serialization
+		case MFT_PROTOBUF:{//use protobuf to serialization
 			PChat pchat;
 			pchat.set_information(info);
 			ret = pchat.SerializeToString(&output);
 			break;
+         }
 		}
 	}
 	return ret;
@@ -166,7 +173,7 @@ bool parseMessage2(const std::string& input, int* type, std::string& output) {
 		auto buffer = reinterpret_cast<const char*>(&bind_name);
 		output.assign(buffer, buffer + sizeof(bind_name));*/
 		//使用序列化
-		output = serialize(SBindName(std::move(name)));
+		output = oserialize(SBindName(std::move(name)));
 		return true;
 
 	}
@@ -184,7 +191,7 @@ bool parseMessage2(const std::string& input, int* type, std::string& output) {
 		auto buffer = reinterpret_cast<const char*> (&chat);
 		output.assign(buffer, buffer + sizeof(chat));*/
 		//使用序列化
-		output = serialize(SChatInfo(std::move(info)));
+		output = oserialize(SChatInfo(std::move(info)));
 		return true;
 	}
 

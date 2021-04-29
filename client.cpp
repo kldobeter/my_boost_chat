@@ -71,7 +71,7 @@ void chat_client::print_readdata(int flag) {
 			SRoomInfo roominfo;
 			iserialize(roominfo, std::string(m_readmsg.body(), m_readmsg.body() + m_readmsg.body_length()));
 			std::cout << "Client:[";
-			std::cout << roominfo.get_name() << std::endl;
+			std::cout << roominfo.get_name() <<"]"<< std::endl;
 			std::cout << "'" << roominfo.get_info() << "'" << std::endl;
 			break;
 		}

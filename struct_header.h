@@ -1,4 +1,6 @@
 #pragma once
+#include "serialize_object.h"
+#include <sstream>
 #include <string>
 
 enum MsgFormatType {
@@ -45,7 +47,7 @@ bool parseMessage(const std::string& input, int* type, std::string& output, int 
 //bool parseMessageToProto(const std::string& input, int* type, std::string& output);
 
 template <typename T>
-void iserialize(const T& obj, const std::string& str) {
+void iserialize(T& obj, const std::string& str) {
 	std::stringstream ss(str);
 	boost::archive::text_iarchive ia(ss);
 	ia& obj;
