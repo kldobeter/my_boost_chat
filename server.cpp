@@ -4,33 +4,45 @@
 #include "json_object.h"
 #include "chat_protocal.pb.h"
 
+chat_room::chat_room(boost::asio::io_service& io)
+    :m_strand(io){}
+
 void chat_room::join(chat_participant_ptr participant) 
 {//有session加入该room
     std::cout<<"one session join the room,recent_msg size="<<m_recent_msgs.size()<<std::endl;
-	m_participants.insert(participant);
-	for (const auto& msg : m_recent_msgs)
-		participant->deliver(msg);
+    //std::lock_guard<std::mutex> guard(m_mutex);
+    m_strand.post([this,participant]{
+	    m_participants.insert(participant);
+	    for (const auto& msg : m_recent_msgs)
+	    	participant->deliver(msg);
+    });
 
 }
 void chat_room::leave(chat_participant_ptr participant) 
 {//有session离开该room
     std::cout<<"one session leave the room"<<std::endl;
-	m_participants.erase(participant);
+    //std::lock_guard<std::mutex> guard(m_mutex);
+    m_strand.post([this,participant]{
+	    m_participants.erase(participant);
+    });
 }
 void chat_room::deliver(const chat_message& msg) 
 {
-	m_recent_msgs.emplace_back(msg);
-	while (m_recent_msgs.size() > max_recent_msgs) 
-	{
-		m_recent_msgs.pop_front();
-	}
-	//若是在room中有一个人发消息，则room中的其他人都能够收到消息
-	for (auto& participant : m_participants)
-		participant->deliver(msg);
+    //std::lock_guard<std::mutex> guard(m_mutex);
+    m_strand.post([this,msg]{
+    	m_recent_msgs.emplace_back(msg);
+    	while (m_recent_msgs.size() > max_recent_msgs) 
+    	{
+    		m_recent_msgs.pop_front();
+    	}
+    	//若是在room中有一个人发消息，则room中的其他人都能够收到消息
+    	for (auto& participant : m_participants)
+    		participant->deliver(msg);
+    });
 }
 
 chat_session::chat_session(boost::asio::ip::tcp::socket socket, chat_room& room)
-	:m_socket(std::move(socket)), m_room(room) {}
+	:m_socket(std::move(socket)), m_room(room), m_strand((boost::asio::io_service&)(m_socket.get_executor().context())){}
 
 void chat_session::start() {
 	m_room.join(shared_from_this());
@@ -38,40 +50,45 @@ void chat_session::start() {
 }
 
 void chat_session::deliver(const chat_message& msg) {
-	bool b_is_write = !m_writemsg.empty();
-	m_writemsg.emplace_back(msg);
-	if (!b_is_write) {
-		do_write();
-	}
+
+    m_strand.post([this,msg]{
+    	bool b_is_write = !m_writemsg.empty();
+    	m_writemsg.emplace_back(msg);
+    	if (!b_is_write) {
+    		do_write();
+    	}
+    });
 }
 void chat_session::do_read_header() {
 	auto self(shared_from_this());
 	boost::asio::async_read(m_socket, boost::asio::buffer(m_readmsg.data(), m_readmsg.header_length),
-		[this, self](const boost::system::error_code& ec, std::size_t length) {
+		m_strand.wrap([this, self](const boost::system::error_code& ec, std::size_t length) {
 			if (!ec && m_readmsg.decode_header()) {//m_readmsg需要使用this
 				do_read_body();
 			}
 			else {
 				m_room.leave(self);
 			}
-		});
+		}));
 }
 void chat_session::do_read_body() {
 	auto self(shared_from_this());
 	boost::asio::async_read(m_socket, boost::asio::buffer(m_readmsg.body(), m_readmsg.body_length()),
-		[this, self](const boost::system::error_code& ec, std::size_t length) {
+		m_strand.wrap([this, self](const boost::system::error_code& ec, std::size_t length) {
 			if (!ec) {//读取一个完整的消息header+body
 				//m_room.deliver(m_readmsg);
 				//处理收到的数据包，经过解析处理，再发送给server
 				//handle_message(MFT_C_TRADITIONAL);
-				handle_message(MFT_SERIALIZATION);
+				//handle_message(MFT_SERIALIZATION);
+				//handle_message(MFT_JSON);
+				handle_message(MFT_PROTOBUF);
 				do_read_header();
 			}
 			else {
 				m_room.leave(self);
 			}
-		}
-	);
+		})
+    );
 }
 RoomInformation chat_session::buildRoomInfo() const {
 	RoomInformation info{0};
@@ -182,7 +199,7 @@ void chat_session::do_write() {
 	auto self(shared_from_this());
 	boost::asio::async_write(m_socket,
 		boost::asio::buffer(m_writemsg.front().data(), m_writemsg.front().length()),
-		[this, self](const boost::system::error_code& ec, std::size_t length) {
+		m_strand.wrap([this, self](const boost::system::error_code& ec, std::size_t length) {
 			if (!ec) {
 				m_writemsg.pop_front();
 				if (!m_writemsg.empty()) {
@@ -192,11 +209,11 @@ void chat_session::do_write() {
 			}else {
 					m_room.leave(self);
 				}
-		});
+		}));
 }
 
 chat_server::chat_server(boost::asio::io_service& io,const boost::asio::ip::tcp::endpoint& endpoint)
-	:m_socket(io), m_accept(io, endpoint) {
+	:m_socket(io), m_accept(io, endpoint), m_room(io){
 	do_accept();
 }
 

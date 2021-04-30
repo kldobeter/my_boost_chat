@@ -10,6 +10,16 @@
 
 #include <vector>
 //
+//
+static std::function<void()> SafeHandler;
+void signalHandler(int signo){
+    BOOST_LOG_TRIVIAL(info)<<"handle system signal:"<<signo;
+    if(SafeHandler){
+        SafeHandler();
+        SafeHandler = nullptr;
+    }
+}
+
 //using chat_message_queue = std::deque<chat_message>;
 //
 int test_server(int argc, char* argv[]) {
@@ -21,6 +31,11 @@ int test_server(int argc, char* argv[]) {
 		}
 
 		boost::asio::io_service io_service;
+
+        //catch signal
+        SafeHandler = [&io_service]{io_service.stop();};
+        signal(SIGINT,signalHandler);
+
 		std::list<chat_server> servers;
 		for (int i = 1;i < argc;++i) {
 			boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(),atoi(argv[i]));//ipºÍport
@@ -33,8 +48,14 @@ int test_server(int argc, char* argv[]) {
 			thread_pool.emplace_back([&io_service]() {io_service.run();});
 		}
 		io_service.run();
+
+        for(auto& thread : thread_pool){
+            thread.join();
+        }
+
 	}
 	catch (const std::exception& e) {
+        BOOST_LOG_TRIVIAL(error)<<"Exception:"<<e.what()<<std::endl;
 		std::cerr << e.what() << std::endl;
 	}
 
@@ -108,7 +129,7 @@ void setseveritylevel(){
 int main(int argc, char* argv[]) {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-    setlogintofile();
+    //setlogintofile();
     setseveritylevel();
     //log
     BOOST_LOG_TRIVIAL(trace)<<"A trace severity message!";
@@ -118,10 +139,14 @@ int main(int argc, char* argv[]) {
     BOOST_LOG_TRIVIAL(error)<<"A error severity message!";
     BOOST_LOG_TRIVIAL(fatal)<<"A fatal severity message!";
 
+    //
 	test_server(argc, argv);
 	//test_client(argc, argv);
 
+    //
 	//ÊÍ·ÅprotobufÄÚ´æ
 	google::protobuf::ShutdownProtobufLibrary();
-	return 0;
+    BOOST_LOG_TRIVIAL(info)<<"safe release all resources!";
+	
+    return 0;
 }
