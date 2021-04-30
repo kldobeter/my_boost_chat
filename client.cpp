@@ -105,8 +105,10 @@ void chat_client::do_read_body() {
 			if (!ec) {
 				//输出读到的数据
 				//print_readdata(MFT_C_TRADITIONAL);
-				print_readdata(MFT_SERIALIZATION);
-				//
+				//print_readdata(MFT_SERIALIZATION);
+				//print_readdata(MFT_JSON);
+				print_readdata(MFT_PROTOBUF);
+				
 				do_read_header();
 			}
 			else {

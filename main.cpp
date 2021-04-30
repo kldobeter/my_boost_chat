@@ -1,6 +1,12 @@
 #include "server.h"
 #include "client.h"
 #include "chat_protocal.pb.h"
+//log output
+#include <boost/log/trivial.hpp>
+//set the severity level
+#include <boost/log/expressions.hpp>
+//put the output log into the file
+#include <boost/log/utility/setup/file.hpp>
 
 #include <vector>
 //
@@ -87,10 +93,33 @@ void test_client(int argc, char* argv[]) {
 	}
 
 }
+//设置日志输出到文件
+void setlogintofile(){
+    boost::log::add_file_log("output.log");
+}
+
+//设置日志打印级别
+void setseveritylevel(){
+    //level >=info ,it can output
+    boost::log::core::get()->set_filter(
+        boost::log::trivial::severity >= boost::log::trivial::info        
+    );
+}
 int main(int argc, char* argv[]) {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
-//	test_server(argc, argv);
-	test_client(argc, argv);
+
+    setlogintofile();
+    setseveritylevel();
+    //log
+    BOOST_LOG_TRIVIAL(trace)<<"A trace severity message!";
+    BOOST_LOG_TRIVIAL(debug)<<"A debug severity message!";
+    BOOST_LOG_TRIVIAL(info)<<"A info severity message!";
+    BOOST_LOG_TRIVIAL(warning)<<"A warning severity message!";
+    BOOST_LOG_TRIVIAL(error)<<"A error severity message!";
+    BOOST_LOG_TRIVIAL(fatal)<<"A fatal severity message!";
+
+	test_server(argc, argv);
+	//test_client(argc, argv);
 
 	//释放protobuf内存
 	google::protobuf::ShutdownProtobufLibrary();

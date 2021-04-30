@@ -9,6 +9,7 @@
 #include <iostream>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <utility>
 //c库头文件
@@ -20,12 +21,16 @@ class chat_session;
 class chat_room {
 	using chat_participant_ptr = std::shared_ptr<chat_session>;
 public:
+    
+    chat_room(boost::asio::io_service& io);
 	void join(chat_participant_ptr participant);
 	void leave(chat_participant_ptr participant);
 	void deliver(const chat_message& msg);
 
 private:
-	std::set<chat_participant_ptr> m_participants;//该聊天室的session集合
+    //std::mutex m_mutex;
+    boost::asio::io_service::strand m_strand;
+    std::set<chat_participant_ptr> m_participants;//该聊天室的session集合
 	enum { max_recent_msgs = 1024 };
 	std::deque<chat_message> m_recent_msgs;//存放历史消息
 };
@@ -51,6 +56,8 @@ private:
 	std::string buildRoomInfoStr(int flag) const;
 
 	boost::asio::ip::tcp::socket m_socket;
+    //io_service是线程不安全的，需要添加保护
+    boost::asio::io_service::strand m_strand;
 	chat_room& m_room;//该地方使用引用，表明chat_session比chat_room对象的生命周期短
 	chat_message m_readmsg;
 	std::deque<chat_message> m_writemsg;
